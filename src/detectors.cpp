@@ -6,7 +6,7 @@
 
 using namespace cv;
 
-void detectAndDisplay(Mat frame)
+std::vector<Rect> detectAndDisplay(Mat frame)
 {
     cv::CascadeClassifier face_cascade("haarcascade_frontalface_alt.xml");
     cv::CascadeClassifier eyes_cascade("haarcascade_eye_tree_eyeglasses.xml");
@@ -31,5 +31,5 @@ void detectAndDisplay(Mat frame)
             circle(frame, eye_center, radius, Scalar(255, 0, 0), 4);
         }
     }
-    //-- Show what you got
+    return faces;
 }

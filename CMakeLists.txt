@@ -8,10 +8,12 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 set(IMAGE_DIR "images")
 set(VIDEO_DIR "videos")
-set(BIN_DIR "${CMAKE_BINARY_DIR}/bin")
+set(ASSETS_DIR "assets")
+set(BIN_DIR "${CMAKE_BINARY_DIR}/")
 
 file(COPY ${IMAGE_DIR} DESTINATION ${BIN_DIR})
 file(COPY ${VIDEO_DIR} DESTINATION ${BIN_DIR})
+file(COPY "${ASSETS_DIR}/" DESTINATION ${BIN_DIR})
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 

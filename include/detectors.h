@@ -3,4 +3,4 @@
 #include "opencv2/imgproc.hpp"
 #include "opencv2/videoio.hpp"
 
-void detectAndDisplay(cv::Mat frame);
+std::vector<cv::Rect> detectAndDisplay(cv::Mat frame);
