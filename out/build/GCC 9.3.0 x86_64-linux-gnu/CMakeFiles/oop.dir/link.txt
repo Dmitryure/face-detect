@@ -1,0 +1,2 @@
+/usr/bin/ar qc lib/liboop.a  CMakeFiles/oop.dir/src/detectors.cpp.o CMakeFiles/oop.dir/src/utils.cpp.o
+/usr/bin/ranlib lib/liboop.a

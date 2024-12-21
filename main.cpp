@@ -4,6 +4,8 @@
 #include <opencv2/ximgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/tracking/tracker.hpp>
+#include "utils.h"
+#include "detectors.h"
 using namespace std;
 using namespace cv;
 
@@ -17,11 +19,16 @@ void show(string window_name, cv::Mat img)
 
 int main()
 {
-    VideoCapture vid = VideoCapture("./videos/kurt_russel_china.avi");
+    VideoCapture vid = VideoCapture(video_path("kurt_russel_china.avi"));
     Mat frame;
     for (;;)
     {
         vid >> frame;
+
+        if (frame.empty())
+            break;
+
+        detectAndDisplay(frame);
         show("Test", frame);
     }
     return 0;

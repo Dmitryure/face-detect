@@ -1,0 +1,4 @@
+/home/hubs-guide/face-detect/out/build/GCC 9.3.0 x86_64-linux-gnu/CMakeFiles/rebuild_cache.dir
+/home/hubs-guide/face-detect/out/build/GCC 9.3.0 x86_64-linux-gnu/CMakeFiles/edit_cache.dir
+/home/hubs-guide/face-detect/out/build/GCC 9.3.0 x86_64-linux-gnu/CMakeFiles/runner.dir
+/home/hubs-guide/face-detect/out/build/GCC 9.3.0 x86_64-linux-gnu/CMakeFiles/oop.dir
