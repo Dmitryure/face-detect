@@ -79,12 +79,15 @@ int main()
     for (;;)
     {
         vid >> frame;
+
         if (frame.empty())
             break;
+        Mat frame_gray;
+        cvtColor(frame, frame_gray, COLOR_BGR2GRAY);
         int frameIndex = static_cast<int>(vid.get(cv::CAP_PROP_POS_FRAMES));
         if (frameIndex % 10 == 0)
         {
-            faces = detectAndDisplay(frame);
+            faces = detectAndDisplay(frame_gray);
             if (faces.size())
             {
                 trackers.clear();
@@ -105,11 +108,9 @@ int main()
             cv::Rect2d myROI(faces[i].x, faces[i].y, faces[i].width, faces[i].height);
             bool success = trackers[i]->update(frame, myROI);
 
-            // Print feature vector size (optional)
             if (success)
             {
-                // Draw the tracked object
-                cv::rectangle(frame, myROI, cv::Scalar(255, 0, 0), 2, 1);
+                cv::rectangle(frame, myROI, cv::Scalar(0, 255, 0), 2, 1);
             }
             else
             {
