@@ -70,8 +70,12 @@ cv::Mat computeHOG(const cv::Mat &img, cv::HOGDescriptor &hog)
 int main()
 {
     show_files();
+    string tr;
+    cout << "Tracker TLD | KCF, TLD by default" << endl;
+    cin >> tr;
+    cout << tr << " selected" << endl;
     cv::Mat photo = cv::imread("./images/woman.png", cv::IMREAD_GRAYSCALE);
-    VideoCapture vid = VideoCapture(video_path("kurt_russel_china.avi"));
+    VideoCapture vid = VideoCapture(video_path("kurt_russel_china_2.avi"));
     Mat frame;
     std::vector<cv::Ptr<cv::Tracker>> trackers;
     std::vector<Rect> faces;
@@ -93,7 +97,15 @@ int main()
                 trackers.clear();
                 for (size_t face = 0; face < faces.size(); face++)
                 {
-                    auto tracker = cv::TrackerKCF::create();
+                    cv::Ptr<cv::Tracker> tracker;
+                    if (tr == "KCF")
+                    {
+                        tracker = cv::TrackerKCF::create();
+                    }
+                    else
+                    {
+                        tracker = cv::TrackerTLD::create();
+                    }
                     cv::Rect myROI(faces[face].x, faces[face].y, faces[face].width, faces[face].height);
                     tracker->init(frame, myROI);
                     // Resize the ROI to match the HOG descriptor window size
