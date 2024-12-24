@@ -7,20 +7,15 @@
 #include <opencv2/tracking.hpp>
 #include <opencv2/ml.hpp>
 #include <opencv2/features2d.hpp>
+#include <opencv2/ml.hpp>
 #include "utils.h"
 #include "detectors.h"
 #include <dirent.h> // POSIX library for directory traversal
+
 using namespace std;
 
 using namespace cv;
-
-void show(string window_name, cv::Mat img)
-{
-    cv::namedWindow(window_name, cv::WINDOW_AUTOSIZE);
-    cv::moveWindow(window_name, 700, 150);
-    cv::imshow(window_name, img);
-    cv::waitKey(0);
-};
+using namespace cv::ml;
 
 int show_files()
 {
@@ -75,10 +70,33 @@ int main()
     cin >> tr;
     cout << tr << " selected" << endl;
     cv::Mat photo = cv::imread("./images/woman.png", cv::IMREAD_GRAYSCALE);
-    VideoCapture vid = VideoCapture(video_path("kurt_russel_china_2.avi"));
+    VideoCapture vid = VideoCapture(video_path("kurt_russel_china.avi"));
     Mat frame;
     std::vector<cv::Ptr<cv::Tracker>> trackers;
     std::vector<Rect> faces;
+
+    HOGDescriptor hog(Size(64, 128), Size(16, 16), Size(8, 8), Size(8, 8), 9);
+    auto images = load_images("kurt_russel");
+    std::vector<int> labels; // Corresponding labels
+    Mat trainingData, trainingLabels;
+    for (size_t i = 0; i < images.size(); ++i)
+    {
+        std::vector<float> descriptors;
+        cv::resize(images[i], images[i], cv::Size(64, 128));
+        hog.compute(images[i], descriptors);
+        if (descriptors.empty())
+        {
+            std::cerr << "Error: Failed to compute HOG descriptors for image " << i << std::endl;
+            continue;
+        }
+        trainingData.push_back(Mat(descriptors).t());
+        labels.push_back(i);
+        trainingLabels.push_back(labels[i]);
+    }
+
+    Ptr<KNearest> knn = KNearest::create();
+    knn->setDefaultK(3);
+    knn->train(trainingData, ROW_SAMPLE, trainingLabels);
 
     for (;;)
     {
@@ -110,6 +128,8 @@ int main()
                     tracker->init(frame, myROI);
                     // Resize the ROI to match the HOG descriptor window size
                     trackers.push_back(tracker);
+                    imwrite(to_string(frameIndex) + "k.jpg", frame(myROI));
+                    waitKey();
                 }
             };
         };
@@ -122,7 +142,28 @@ int main()
 
             if (success)
             {
-                cv::rectangle(frame, myROI, cv::Scalar(0, 255, 0), 2, 1);
+                cv::Mat testImage = frame(myROI);
+                cvtColor(testImage, testImage, COLOR_BGR2GRAY);
+                std::vector<float> testDescriptors;
+                cv::resize(testImage, testImage, cv::Size(64, 128));
+                hog.compute(testImage, testDescriptors);
+                Mat testMat = Mat(testDescriptors).t();
+                Mat results;
+                float response = knn->findNearest(testMat, 3, results);
+
+                // Display results
+                if (response != 0)
+                {
+                    cv::putText(frame, to_string(response), cv::Point(faces[i].x, faces[i].y - 10),
+                                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 2);
+                    std::cout << "Person Found!" << std::endl;
+                    cv::rectangle(frame, myROI, cv::Scalar(0, 255, 0), 2, 1);
+                }
+                else
+                {
+                    std::cout << "Person Not Found!" << std::endl;
+                    cv::rectangle(frame, myROI, cv::Scalar(0, 0, 255), 2, 1);
+                }
             }
             else
             {
