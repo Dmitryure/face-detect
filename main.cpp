@@ -69,30 +69,34 @@ int main()
     cout << "Tracker TLD | KCF, TLD by default" << endl;
     cin >> tr;
     cout << tr << " selected" << endl;
-    cv::Mat photo = cv::imread("./images/woman.png", cv::IMREAD_GRAYSCALE);
-    VideoCapture vid = VideoCapture(video_path("kurt_russel_china.avi"));
+    VideoCapture vid = VideoCapture(video_path("little_china_3.avi"));
     Mat frame;
     std::vector<cv::Ptr<cv::Tracker>> trackers;
     std::vector<Rect> faces;
 
-    HOGDescriptor hog(Size(64, 128), Size(16, 16), Size(8, 8), Size(8, 8), 9);
-    auto images = load_images("kurt_russel");
+    HOGDescriptor hog(Size(128, 256), Size(32, 32), Size(16, 16), Size(8, 8), 9);
+    auto images = load_images();
     std::vector<int> labels; // Corresponding labels
+    map<int, string> labelsMap;
     Mat trainingData, trainingLabels;
-    for (size_t i = 0; i < images.size(); ++i)
+    int actorIndex = 1;
+    for (auto &[key, vec] : images)
     {
-        std::vector<float> descriptors;
-        cv::resize(images[i], images[i], cv::Size(64, 128));
-        hog.compute(images[i], descriptors);
-        if (descriptors.empty())
+        std::cout << "Processing category: " << key << std::endl;
+        for (size_t index = 0; index < vec.size(); ++index)
         {
-            std::cerr << "Error: Failed to compute HOG descriptors for image " << i << std::endl;
-            continue;
+            cv::Mat &mat = vec[index];
+            std::vector<float> descriptors;
+            cv::resize(mat, mat, cv::Size(128, 256));
+            hog.compute(mat, descriptors);
+            trainingData.push_back(Mat(descriptors).t());
+            labels.push_back(actorIndex);
+            labelsMap[actorIndex] = key;
+            cout << actorIndex << key << endl;
         }
-        trainingData.push_back(Mat(descriptors).t());
-        labels.push_back(i);
-        trainingLabels.push_back(labels[i]);
+        actorIndex++;
     }
+    trainingLabels = Mat(labels).reshape(1, labels.size());
 
     Ptr<KNearest> knn = KNearest::create();
     knn->setDefaultK(3);
@@ -101,7 +105,6 @@ int main()
     for (;;)
     {
         vid >> frame;
-
         if (frame.empty())
             break;
         Mat frame_gray;
@@ -128,8 +131,8 @@ int main()
                     tracker->init(frame, myROI);
                     // Resize the ROI to match the HOG descriptor window size
                     trackers.push_back(tracker);
-                    imwrite(to_string(frameIndex) + "k.jpg", frame(myROI));
-                    waitKey();
+                    imwrite(to_string(frameIndex) + "c.jpg", frame(myROI));
+                    // waitKey();
                 }
             };
         };
@@ -145,24 +148,31 @@ int main()
                 cv::Mat testImage = frame(myROI);
                 cvtColor(testImage, testImage, COLOR_BGR2GRAY);
                 std::vector<float> testDescriptors;
-                cv::resize(testImage, testImage, cv::Size(64, 128));
+                cv::resize(testImage, testImage, cv::Size(128, 256));
                 hog.compute(testImage, testDescriptors);
                 Mat testMat = Mat(testDescriptors).t();
-                Mat results;
-                float response = knn->findNearest(testMat, 3, results);
+                cv::normalize(testMat, testMat, 0, 1, cv::NORM_MINMAX);
+                Mat results, neighborResponses, dists;
+                float response = knn->findNearest(testMat, 3, results, neighborResponses, dists);
 
-                // Display results
-                if (response != 0)
+                float avgDistance = cv::mean(dists)[0];
+                cout << avgDistance << endl;
+                float distanceThreshold = 550;
+                if (avgDistance < distanceThreshold)
                 {
-                    cv::putText(frame, to_string(response), cv::Point(faces[i].x, faces[i].y - 10),
+                    // Person is known
+                    cv::putText(frame, labelsMap[response], cv::Point(faces[i].x, faces[i].y),
                                 cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 2);
-                    std::cout << "Person Found!" << std::endl;
+                    std::cout << "Person Found! Label: " << labelsMap[response] << std::endl;
                     cv::rectangle(frame, myROI, cv::Scalar(0, 255, 0), 2, 1);
                 }
                 else
                 {
-                    std::cout << "Person Not Found!" << std::endl;
+                    // Person is unknown
+                    std::cout << "Person Not Found or Unknown!" << std::endl;
                     cv::rectangle(frame, myROI, cv::Scalar(0, 0, 255), 2, 1);
+                    cv::putText(frame, "Unknown", cv::Point(faces[i].x, faces[i].y),
+                                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 2);
                 }
             }
             else

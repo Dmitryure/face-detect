@@ -4,6 +4,10 @@
 #include <iostream>
 #include "utils.h"
 #include "vector"
+#include "map"
+#include <regex>
+#include <filesystem>
+#include <fstream>
 
 using namespace std;
 
@@ -17,20 +21,53 @@ void show(string window_name, cv::Mat img)
 
 string video_path(string path)
 {
-    cout << path << endl;
+    std::cout << path << endl;
     return "./videos/" + path;
 }
 
-vector<cv::Mat> load_images(string name)
+std::string extractBaseName(const std::string &filename)
 {
-    vector<cv::Mat> images;
+    // Regular expression to match "foo_bar" part
+    regex pattern(R"((.*)_[0-9]+\.[^\.]+$)");
+    smatch match;
 
-    for (size_t i = 1; i < 11; i++)
+    if (regex_match(filename, match, pattern))
     {
-        cv::Mat image = cv::imread("./images/" + name + "_" + to_string(i) + ".jpg", cv::IMREAD_GRAYSCALE);
-        images.push_back(image);
-        cout << "./images/" + name + "_" + to_string(i) + ".jpg" + " READ" << endl;
-    };
-    cout << "images" << images.size() << endl;
+        return match[1]; // Return the first capturing group
+    }
+
+    // If no match, return the original string
+    return filename;
+}
+
+map<string, vector<cv::Mat>> load_images()
+{
+    map<string, vector<cv::Mat>> images;
+    std::string imageFolder = "images";
+    for (const auto &entry : std::filesystem::directory_iterator(imageFolder))
+    {
+
+        std::string fileName = entry.path().filename().string();
+        std::string filePath = entry.path().string();
+
+        // Read the image
+        cv::Mat image = cv::imread(filePath, cv::IMREAD_GRAYSCALE);
+        if (image.empty())
+        {
+            std::cerr << "Warning: Unable to read image file " << fileName << std::endl;
+            continue;
+        }
+        cv::normalize(image, image, 0, 255, cv::NORM_MINMAX);
+        cv::Mat mirrored;
+        cv::Mat blurred;
+        cv::flip(image, mirrored, 1);
+        GaussianBlur(image, blurred, cv::Size(5, 5), 1.5);
+        std::string actorName;
+        actorName = extractBaseName(fileName);
+        images[actorName].push_back(image);
+        images[actorName].push_back(mirrored);
+        images[actorName].push_back(blurred);
+    }
+
     return images;
 }
