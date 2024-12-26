@@ -7,7 +7,6 @@
 #include <opencv2/tracking.hpp>
 #include <opencv2/ml.hpp>
 #include <opencv2/features2d.hpp>
-#include <opencv2/ml.hpp>
 #include "utils.h"
 #include "detectors.h"
 #include <dirent.h> // POSIX library for directory traversal
@@ -21,7 +20,7 @@ int show_files()
 {
 
     // Get the current directory (can be set explicitly if needed)
-    std::string currentDir = ".";
+    std::string currentDir = "./videos";
 
     // Open the directory
     DIR *dir = opendir(currentDir.c_str());
@@ -42,7 +41,7 @@ int show_files()
         {
             continue; // Skip current and parent directory entries
         }
-        std::cout << " - " << name << "\n";
+        std::cout << name.replace(name.begin() + name.size() - 4, name.end(), "") << "\n";
     }
 
     // Close the directory
@@ -50,9 +49,13 @@ int show_files()
     return 0;
 }
 
-double euclideanDistance(const cv::Mat &vec1, const cv::Mat &vec2)
+void ensureROIInBounds(cv::Rect2d &roi, const cv::Size &imageSize)
 {
-    return cv::norm(vec1, vec2, cv::NORM_L2); // L2 norm (Euclidean distance)
+    // Ensure the ROI stays within the image boundaries
+    roi.x = std::max(0, static_cast<int>(roi.x));
+    roi.y = std::max(0, static_cast<int>(roi.y));
+    roi.width = std::min(imageSize.width - roi.x, roi.width);
+    roi.height = std::min(imageSize.height - roi.y, roi.height);
 }
 
 cv::Mat computeHOG(const cv::Mat &img, cv::HOGDescriptor &hog)
@@ -66,11 +69,23 @@ int main()
 {
     show_files();
     string tr;
-    cout << "Tracker TLD | KCF, TLD by default" << endl;
-    cin >> tr;
-    cout << tr << " selected" << endl;
-    VideoCapture vid = VideoCapture(video_path("little_china_3.avi"));
-    Mat frame;
+    tr = "KCF";
+    VideoCapture vid;
+    std::vector<cv::VideoCapture> videos;
+    std::string video_name;
+    cout << "g(1-4) = Gentlemen (2024), possible actors: kaya_scodelario, theo_james" << endl;
+    cout << "pc(1-7) = Perfect Couple, The (2024), possible actors: nicole_kidman, liev_schreiber" << endl;
+    cout << "lc(1-6) = Big Trouble in Little China (1986), possible actors: dennis_dun, kurt_russel" << endl;
+    cout << "Either type \"all\" " << "or select video from above" << endl;
+    cin >> video_name;
+    if (video_name == "all")
+    {
+        videos = load_videos();
+    }
+    else
+    {
+        videos = {VideoCapture(video_path(video_name + ".avi"))};
+    }
     std::vector<cv::Ptr<cv::Tracker>> trackers;
     std::vector<Rect> faces;
 
@@ -101,88 +116,92 @@ int main()
     Ptr<KNearest> knn = KNearest::create();
     knn->setDefaultK(3);
     knn->train(trainingData, ROW_SAMPLE, trainingLabels);
-
-    for (;;)
+    for (size_t video_index = 0; video_index < videos.size(); video_index++)
     {
-        vid >> frame;
-        if (frame.empty())
-            break;
-        Mat frame_gray;
-        cvtColor(frame, frame_gray, COLOR_BGR2GRAY);
-        int frameIndex = static_cast<int>(vid.get(cv::CAP_PROP_POS_FRAMES));
-        if (frameIndex % 10 == 0)
+        Mat frame;
+        vid = videos[video_index];
+        for (;;)
         {
-            faces = detectAndDisplay(frame_gray);
-            if (faces.size())
+            vid >> frame;
+            if (frame.empty())
+                break;
+            Mat frame_gray;
+            cvtColor(frame, frame_gray, COLOR_BGR2GRAY);
+            int frameIndex = static_cast<int>(vid.get(cv::CAP_PROP_POS_FRAMES));
+            if (frameIndex % 10 == 0)
             {
-                trackers.clear();
-                for (size_t face = 0; face < faces.size(); face++)
+                faces = detectAndDisplay(frame_gray);
+                if (faces.size())
                 {
-                    cv::Ptr<cv::Tracker> tracker;
-                    if (tr == "KCF")
+                    trackers.clear();
+                    for (size_t face = 0; face < faces.size(); face++)
                     {
-                        tracker = cv::TrackerKCF::create();
+                        cv::Ptr<cv::Tracker> tracker;
+                        if (tr == "KCF")
+                        {
+                            tracker = cv::TrackerKCF::create();
+                        }
+                        else
+                        {
+                            tracker = cv::TrackerTLD::create();
+                        }
+                        cv::Rect myROI(faces[face].x, faces[face].y, faces[face].width, faces[face].height);
+                        tracker->init(frame, myROI);
+                        // Resize the ROI to match the HOG descriptor window size
+                        trackers.push_back(tracker);
+                        imwrite(to_string(frameIndex) + "c.jpg", frame(myROI));
+                        // waitKey();
+                    }
+                };
+            };
+            if (!faces.size())
+                continue;
+            for (size_t i = 0; i < faces.size(); i++)
+            {
+                cv::Rect2d myROI(faces[i].x, faces[i].y, faces[i].width, faces[i].height);
+                bool success = trackers[i]->update(frame, myROI);
+                ensureROIInBounds(myROI, frame.size());
+                if (success)
+                {
+                    cv::Mat testImage = frame(myROI);
+                    cvtColor(testImage, testImage, COLOR_BGR2GRAY);
+                    std::vector<float> testDescriptors;
+                    cv::resize(testImage, testImage, cv::Size(128, 256));
+                    hog.compute(testImage, testDescriptors);
+                    Mat testMat = Mat(testDescriptors).t();
+                    cv::normalize(testMat, testMat, 0, 1, cv::NORM_MINMAX);
+                    Mat results, neighborResponses, dists;
+                    float response = knn->findNearest(testMat, 3, results, neighborResponses, dists);
+
+                    float avgDistance = cv::mean(dists)[0];
+                    cout << avgDistance << endl;
+                    float distanceThreshold = 525;
+                    if (avgDistance < distanceThreshold)
+                    {
+                        // Person is known
+                        cv::putText(frame, labelsMap[response], cv::Point(faces[i].x, faces[i].y),
+                                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 2);
+                        std::cout << "Person Found! Label: " << labelsMap[response] << std::endl;
+                        cv::rectangle(frame, myROI, cv::Scalar(0, 255, 0), 2, 1);
                     }
                     else
                     {
-                        tracker = cv::TrackerTLD::create();
+                        // Person is unknown
+                        std::cout << "Person Not Found or Unknown!" << std::endl;
+                        cv::rectangle(frame, myROI, cv::Scalar(0, 0, 255), 2, 1);
+                        cv::putText(frame, "Unknown", cv::Point(faces[i].x, faces[i].y),
+                                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 2);
                     }
-                    cv::Rect myROI(faces[face].x, faces[face].y, faces[face].width, faces[face].height);
-                    tracker->init(frame, myROI);
-                    // Resize the ROI to match the HOG descriptor window size
-                    trackers.push_back(tracker);
-                    imwrite(to_string(frameIndex) + "c.jpg", frame(myROI));
-                    // waitKey();
-                }
-            };
-        };
-        if (!faces.size())
-            continue;
-        for (size_t i = 0; i < faces.size(); i++)
-        {
-            cv::Rect2d myROI(faces[i].x, faces[i].y, faces[i].width, faces[i].height);
-            bool success = trackers[i]->update(frame, myROI);
-
-            if (success)
-            {
-                cv::Mat testImage = frame(myROI);
-                cvtColor(testImage, testImage, COLOR_BGR2GRAY);
-                std::vector<float> testDescriptors;
-                cv::resize(testImage, testImage, cv::Size(128, 256));
-                hog.compute(testImage, testDescriptors);
-                Mat testMat = Mat(testDescriptors).t();
-                cv::normalize(testMat, testMat, 0, 1, cv::NORM_MINMAX);
-                Mat results, neighborResponses, dists;
-                float response = knn->findNearest(testMat, 3, results, neighborResponses, dists);
-
-                float avgDistance = cv::mean(dists)[0];
-                cout << avgDistance << endl;
-                float distanceThreshold = 550;
-                if (avgDistance < distanceThreshold)
-                {
-                    // Person is known
-                    cv::putText(frame, labelsMap[response], cv::Point(faces[i].x, faces[i].y),
-                                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 0), 2);
-                    std::cout << "Person Found! Label: " << labelsMap[response] << std::endl;
-                    cv::rectangle(frame, myROI, cv::Scalar(0, 255, 0), 2, 1);
                 }
                 else
                 {
-                    // Person is unknown
-                    std::cout << "Person Not Found or Unknown!" << std::endl;
-                    cv::rectangle(frame, myROI, cv::Scalar(0, 0, 255), 2, 1);
-                    cv::putText(frame, "Unknown", cv::Point(faces[i].x, faces[i].y),
-                                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 2);
+                    std::cerr << "Tracking failure for ROI " << i << std::endl;
                 }
             }
-            else
-            {
-                std::cerr << "Tracking failure for ROI " << i << std::endl;
-            }
-        }
 
-        // cv::Rect myROI(10, 10,100, 100);
-        show("Test", frame);
+            // cv::Rect myROI(10, 10,100, 100);
+            show("Test", frame);
+        }
     }
     return 0;
 }
