@@ -260,7 +260,7 @@ int main()
             }
 
             // cv::Rect myROI(10, 10,100, 100);
-            show("Test", frame);
+            show(video_name, frame);
         }
     }
     return 0;

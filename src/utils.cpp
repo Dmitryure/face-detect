@@ -79,10 +79,8 @@ std::vector<cv::VideoCapture> load_videos()
     for (const auto &entry : std::filesystem::directory_iterator(videosFolder))
     {
 
-        std::string fileName = entry.path().filename().string();
         std::string filePath = entry.path().string();
 
-        // Read the image
         cv::VideoCapture video = cv::VideoCapture(filePath);
         videos.push_back(video);
     }
